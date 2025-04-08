@@ -78,15 +78,35 @@ int main(int argc, char** argv) {
      * main data processing loop
      *
      */
-    printf("x[0]=%f\n", x[0]);
+
+    int myNum = n/size;
+    int myStart = rank*myNum;
+
+    if (rank == size-1) {
+	myNum = n - (size-1)*myNum;
+    }
+
+    int myFinish = myStart + myNum;
+
+//    printf("rank %f\n", rank);
+//    printf("size %f\n", size);
+
+    if (rank == 0) {
+	printf("x[0]=%f\n", x[0]);
+    }
 
     double local_sum = 0.0;
     double mean;
     double start = MPI_Wtime();
 
+    double local_minabs = fabs(x[rank]);
+    double local_maxabs = fabs(x[rank]);
+
     // Calculate the sum of x values
-    for (int i = rank; i < n; i += size) {
+    for (int i = myStart; i < myFinish; i++) {
         local_sum += x[i];
+	if (fabs(x[i]) < local_minabs) local_minabs = fabs(x[i]);
+	if (fabs(x[i]) > local_maxabs) local_maxabs = fabs(x[i]);
     }
 
     double global_sum;
@@ -94,49 +114,55 @@ int main(int argc, char** argv) {
 
     if (rank == 0) {
         mean = global_sum / (double) n;
-        printf("Sum of x values: %f\n", global_sum);
-        printf("Mean: %f\n", mean);
+      //  printf("Sum of x values: %f\n", global_sum);
+      //  printf("Mean: %f\n", mean);
     }
 
     // Broadcast the mean to all processes
     MPI_Bcast(&mean, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
+    local_sum = 0.0;
     // Calculate squared differences
-    for (int i = rank; i < n; i += size) {
-        double val = (x[i] - mean);
-        squaredDiffs[i] = val * val;
+    for (int i = myStart; i < myFinish; i++) {
+        //double val = (x[i] - mean);
+        squaredDiffs[i] = (x[i] - mean)*(x[i] - mean); //val * val;
+	local_sum += squaredDiffs[i];
     }
 
-    local_sum = 0.0;
+    //local_sum = 0.0;
 
     // Calculate the sum of squared differences
-    for (int i = rank; i < n; i += size) {
-        local_sum += squaredDiffs[i];
-    }
+    //for (int i = rank; i < n; i += size) {
+    //    local_sum += squaredDiffs[i];
+    //}
 
     MPI_Reduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
-    if (rank == 0) {
-        double variance = global_sum / (double) n;
-        printf("Sum of squared differences: %f\n", global_sum);
-        printf("Variance: %f\n", variance);
-    }
+    //if (rank == 0) {
+    //    double variance = global_sum / (double) n;
+    //    printf("Sum of squared differences: %f\n", global_sum);
+    //    printf("Variance: %f\n", variance);
+    //}
 
     // Find minimum and maximum absolute values
-    double local_minabs = fabs(x[rank]);
-    double local_maxabs = fabs(x[rank]);
+    //double local_minabs = fabs(x[rank]);
+    //double local_maxabs = fabs(x[rank]);
 
-    for (int i = rank; i < n; i += size) {
-        double val = fabs(x[i]);
-        if (val < local_minabs) local_minabs = val;
-        if (val > local_maxabs) local_maxabs = val;
-    }
+    //for (int i = rank; i < n; i += size) {
+        //double val = fabs(x[i]);
+    //    if (fabs(x[i]) < local_minabs) local_minabs = fabs(x[i]); //val;
+    //    if (fabs(x[i]) > local_maxabs) local_maxabs = fabs(x[i]); //val;
+    //}
 
     double global_minabs, global_maxabs;
     MPI_Reduce(&local_minabs, &global_minabs, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
     MPI_Reduce(&local_maxabs, &global_maxabs, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
     if (rank == 0) {
+	printf("Total parallel time [%f seconds]\n", MPI_Wtime() - start);
+	double variance = global_sum / (double) n;
+	printf("Mean: %f\n", mean);
+	printf("Variance: %f\n", variance);
         printf("Min absolute value: %f\n", global_minabs);
         printf("Max absolute value: %f\n", global_maxabs);
     }
@@ -145,11 +171,13 @@ int main(int argc, char** argv) {
     free(x);
     free(squaredDiffs);
 
-    MPI_Finalize();
+    //MPI_Finalize();
 
     if (rank == 0) {
         printf("Completed. [%f seconds]\n", MPI_Wtime() - startTotalCode);
     }
 
     return 0;
+
+    MPI_Finalize();
 }
